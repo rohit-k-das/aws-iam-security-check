@@ -19,4 +19,4 @@ Environment: Linux, OSX
 
 Usage: python aws_iam_compliance.py
 
-Note: Uncomment lines in main function to send mail
+Note: Uncomment lines in main function to send mail. Dont forget to write the value for company_name mentioned in the start of the script.

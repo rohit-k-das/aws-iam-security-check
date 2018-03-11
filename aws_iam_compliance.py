@@ -14,8 +14,9 @@ from email.utils import formatdate
 #Username convention: first_name.last_name. If its something differnet like first_letter.lastname,etc. fill out the dirty name mapping dictionary below.
 #ONLY FILL THIS OUT, IF YOU ARE GOING TO USE THE MAILING FUNCTION BELOW
 Dirty_name_mapping = {
-
         }
+
+company_name = "example" ##Please enter your company name
 
 mfa_non_compliant = {}
 expired_password_user = {}
@@ -111,19 +112,11 @@ def execute(id):
                         if username not in expired_password_user:
                             expired_password_user[username] = []
                         expired_password_user[username].append(id)
-                else:
-                    if user not in never_logged_in:
-                        never_logged_in[username] = []
-                    never_logged_in[username].append(id)
 
             # Last Activity greater than 90 days: Parsing based on information from credential report
             if password_enabled == 'true':
                 if password_last_used != 'N/A' and password_last_used != 'no_information':
                     last_activity = password_last_used
-                else:
-                    if username not in never_logged_in:
-                        never_logged_in[username] = []
-                    never_logged_in[username].append(id)
 
             if key1_status == 'true':
                 if key1_last_used != 'N/A':
@@ -153,11 +146,17 @@ def execute(id):
                         account_disabled[username] = []
                     account_disabled[username].append(id)
             else:
+	   	# Never Accessed Account: Parsing based on information from credential report
                 if password_last_used == 'N/A' or password_last_used == 'no_information':
                     if key1_status == 'false' and key2_status == 'false':
         	        if username not in never_accessed_account:
                             never_accessed_account[username] = []
                         never_accessed_account[username].append(id)
+		    else:
+		    	#UI Access but never logged in: Parsing based on information from credential report
+                    	if username not in never_logged_in:
+                       		never_logged_in[username] = []
+                    	never_logged_in[username].append(id)
     return
 
 #Send mail to MFA non-compliant people
@@ -166,7 +165,7 @@ def mfa_email(user,accounts,company_name):
     if "." not in user:
         return True
     else:
-        user = user + "@" + company_name + ".com"
+        user = user + "@" + company_name.lower() + ".com"
 
     #Retain sender email and password to send mail
     if not sender_email:
@@ -176,6 +175,7 @@ def mfa_email(user,accounts,company_name):
         else:
             print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
             print "Removing elements from sender_email"
+	    sender_email.clear()
             fromaddr = raw_input("Enter your email address: ")
             password = getpass.getpass()
             sender_email[fromaddr] = password
@@ -191,7 +191,7 @@ def mfa_email(user,accounts,company_name):
         + "Your IAM account has Managment console access but MFA is disabled.\nPlease enable your MFA for the following accounts via direct login to those accounts: " + str(accounts) + ". " + "\n" \
         + "If you are not using the account, please email me so that i can disable the account.\n\n" \
         + "PS: If you have received this mail before please check the AWS account(s) mentioned in the mail. You might have got a repeat/similar mail but with different AWS account(s) id because the username in AWS accounts didn't follow a naming standard. If this mail is the same mail as the previous mail including the same AWS account mentioned in the previous mail, I apologize. \n\n" \
-        + "Thanks,\n" +user.split('.')[0].capitalize()
+        + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
 
     Body = header + msg
     s = smtplib.SMTP('smtp-mail.outlook.com',587)
@@ -212,7 +212,7 @@ def access_key_email(user,accounts,company_name):
     if "." not in user:
         return True
     else:
-        user =  user + "@" + company_name + ".com"
+        user =  user + "@" + company_name.lower() + ".com"
 
     #Retain sender email and password to send mail
     if sender_email:
@@ -222,6 +222,7 @@ def access_key_email(user,accounts,company_name):
         else:
             print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
             print "Removing elements from sender_email"
+	    sender_email.clear()
             fromaddr = raw_input("Enter your email address: ")
             password = getpass.getpass()
             sender_email[fromaddr] = password
@@ -238,7 +239,7 @@ def access_key_email(user,accounts,company_name):
     for counter,account in enumerate(accounts):
         msg = msg + "\t" + str(counter + 1) + ". " + account.capitalize() + ": " + str(", ".join(accounts[account])) + "\n"
 
-    Body = msg + "\n" + "Thanks,\n" + user.split('.')[0].capitalize()
+    Body = msg + "\n" + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
 
     msg = MIMEMultipart()
     msg['From'] = fromaddr
@@ -267,10 +268,185 @@ def access_key_email(user,accounts,company_name):
             s.quit()
             return False
 
-#To do
-#1. Send mail to never_logged_in users
-#2. Send mail to password expired users
-#3. Send mail to accounts that were created but do not have password or access_keys
+#Send mail to never logged in users
+def never_logged_in_mail(user,accounts,company_name):
+    #Assumption: Mail format is first_name.last_name@company_name.com. You would need to fill out the Dirty_name_mapping for users that don't follow the username naming sense of first_name.last_name
+    if "." not in user:
+        return True
+    else:
+        user = user + "@" + company_name.lower() + ".com"
+
+    #Retain sender email and password to send mail
+    if not sender_email:
+        if len(sender_email) == 1:
+            fromaddr = list(sender_email.keys())[0]
+            password = sender_email[fromaddr]
+        else:
+            print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
+            print "Removing elements from sender_email"
+	    sender_email.clear()
+            fromaddr = raw_input("Enter your email address: ")
+            password = getpass.getpass()
+            sender_email[fromaddr] = password
+    else:
+        fromaddr = raw_input("Enter your email address: ")
+        password = getpass.getpass()
+        sender_email[fromaddr] = password
+
+    toaddr = user
+    Subject = "AWS Account subject to GUI access removal"
+    header = "From:" + fromaddr + "\n" + "To:" + toaddr + "\n" + "Subject:" + Subject + "\n"
+    msg = "\nDear " + user.split('.')[0].capitalize() + ",\n\n" \
+        + "You haven't logged in to your IAM account " + str(accounts) + " via browser since its creation.\nPlease login and change your password immediately. If not done within 3 days, we will proceed and remove GUI access.\n\n" \
+        + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
+
+    Body = header + msg
+    s = smtplib.SMTP('smtp-mail.outlook.com',587)
+    s.starttls()
+    s.login(fromaddr,passwd)
+    try:
+        s.sendmail(fromaddr, toaddr, Body)
+        s.quit()
+        return True
+    except Exception, e:
+        if "Connection unexpectedly closed" in e.message:
+            s.quit()
+            return False
+
+#Send mail to never_accessed users
+def never_accessed_mail(user,accounts):
+    #Assumption: Mail format is first_name.last_name@company_name.com. You would need to fill out the Dirty_name_mapping for users that don't follow the username naming sense of first_name.last_name
+    if "." not in user:
+        return True
+    else:
+        user = user + "@" + company_name.lower() + ".com"
+
+    #Retain sender email and password to send mail
+    if not sender_email:
+        if len(sender_email) == 1:
+            fromaddr = list(sender_email.keys())[0]
+            password = sender_email[fromaddr]
+        else:
+            print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
+            print "Removing elements from sender_email"
+	    sender_email.clear()
+            fromaddr = raw_input("Enter your email address: ")
+            password = getpass.getpass()
+            sender_email[fromaddr] = password
+    else:
+        fromaddr = raw_input("Enter your email address: ")
+        password = getpass.getpass()
+        sender_email[fromaddr] = password
+
+    toaddr = user
+    Subject = "AWS Account subject to disablement"
+    header = "From:" + fromaddr + "\n" + "To:" + toaddr + "\n" + "Subject:" + Subject + "\n"
+    msg = "\nDear " + user.split('.')[0].capitalize() + ",\n\n" \
+        + "You have never used your IAM account " + str(accounts) + " since its creation.\nWe will proceed in disabling the mentioned accounts in 3 days. Please respond to the email if you don't wish to have the account deleted with a strong reason.\n\n" \
+        + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
+
+    Body = header + msg
+    s = smtplib.SMTP('smtp-mail.outlook.com',587)
+    s.starttls()
+    s.login(fromaddr,passwd)
+    try:
+        s.sendmail(fromaddr, toaddr, Body)
+        s.quit()
+        return True
+    except Exception, e:
+        if "Connection unexpectedly closed" in e.message:
+            s.quit()
+            return False
+
+#Send mail to password expired users
+def password_expired_mail(user,accounts):
+    #Assumption: Mail format is first_name.last_name@company_name.com. You would need to fill out the Dirty_name_mapping for users that don't follow the username naming sense of first_name.last_name
+    if "." not in user:
+        return True
+    else:
+        user = user + "@" + company_name.lower() + ".com"
+
+    #Retain sender email and password to send mail
+    if not sender_email:
+        if len(sender_email) == 1:
+            fromaddr = list(sender_email.keys())[0]
+            password = sender_email[fromaddr]
+        else:
+            print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
+            print "Removing elements from sender_email"
+	    sender_email.clear()
+            fromaddr = raw_input("Enter your email address: ")
+            password = getpass.getpass()
+            sender_email[fromaddr] = password
+    else:
+        fromaddr = raw_input("Enter your email address: ")
+        password = getpass.getpass()
+        sender_email[fromaddr] = password
+
+    toaddr = user
+    Subject = "AWS Password Expired!!"
+    header = "From:" + fromaddr + "\n" + "To:" + toaddr + "\n" + "Subject:" + Subject + "\n"
+    msg = "\nDear " + user.split('.')[0].capitalize() + ",\n\n" \
+        + "Your password for IAM account " + str(accounts) + " have expired.\nPlease change your password immediately. If password is not changed within 3 days, we will proceed with disabling your account.\n\n" \
+        + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
+
+    Body = header + msg
+    s = smtplib.SMTP('smtp-mail.outlook.com',587)
+    s.starttls()
+    s.login(fromaddr,passwd)
+    try:
+        s.sendmail(fromaddr, toaddr, Body)
+        s.quit()
+        return True
+    except Exception, e:
+        if "Connection unexpectedly closed" in e.message:
+            s.quit()
+            return False
+
+#Send mail to accounts whose last activity is greater than 90 days
+def last_activity_mail(user,accounts):
+    #Assumption: Mail format is first_name.last_name@company_name.com. You would need to fill out the Dirty_name_mapping for users that don't follow the username naming sense of first_name.last_name
+    if "." not in user:
+        return True
+    else:
+        user = user + "@" + company_name.lower() + ".com"
+
+    #Retain sender email and password to send mail
+    if not sender_email:
+        if len(sender_email) == 1:
+            fromaddr = list(sender_email.keys())[0]
+            password = sender_email[fromaddr]
+        else:
+            print "ERROR: More than 1 mail address and password mapping present in sender_email dictionary"
+            print "Removing elements from sender_email"
+	    sender_email.clear()
+            fromaddr = raw_input("Enter your email address: ")
+            password = getpass.getpass()
+            sender_email[fromaddr] = password
+    else:
+        fromaddr = raw_input("Enter your email address: ")
+        password = getpass.getpass()
+        sender_email[fromaddr] = password
+
+    toaddr = user
+    Subject = "AWS Account subject to disablement"
+    header = "From:" + fromaddr + "\n" + "To:" + toaddr + "\n" + "Subject:" + Subject + "\n"
+    msg = "\nDear " + user.split('.')[0].capitalize() + ",\n\n" \
+        + "The last activity from your IAM accounts  " + str(accounts) + " was more than 90 days ago. As per policy, we will proceed with disabling these accounts. Please respond in 3 days if you don't want these accounts disabled.\n\n" \
+        + "Thanks,\n" + fromaddr.split('.')[0].capitalize()
+
+    Body = header + msg
+    s = smtplib.SMTP('smtp-mail.outlook.com',587)
+    s.starttls()
+    s.login(fromaddr,passwd)
+    try:
+        s.sendmail(fromaddr, toaddr, Body)
+        s.quit()
+        return True
+    except Exception, e:
+        if "Connection unexpectedly closed" in e.message:
+            s.quit()
+            return False
 
 #Get all AWS account profiles from aws credentials file
 def get_profiles(cred_file):
@@ -315,7 +491,7 @@ def main():
     print "-----------------"
     for counter,user in enumerate(mfa_non_compliant):
         print str(counter+1) +". " + user + ":" + str(mfa_non_compliant[user])
-        #Uncomment to send mail
+        #Uncomment below to send mail
         #if not mfa_email(user,mfa_non_compliant[user]):
             #mfa_email(user,mfa_non_compliant[user])
     print
@@ -326,7 +502,7 @@ def main():
         print str(main_counter+1) + ". " + user + ":"
         for counter,id in enumerate(user_key_list[user]):
             print  "\t" + str(counter+1) + ". " + id + ": " + str(user_key_list[user][id])
-        #Uncomment to send mail
+        #Uncomment below to send mail
         #if not access_key_email(user,user_key_list[user]):
         #   access_key_email(user,user_key_list[user])
     print
@@ -335,6 +511,9 @@ def main():
     print "----------------"
     for counter,user in enumerate(expired_password_user):
         print str(counter+1) + ". " + user + ":" + str(expired_password_user[user])
+	#Uncomment below to send mail
+        #if not password_expired_mail(user,expired_password_user[user]):
+            #password_expired_mail(user,expired_password_user[user])
     print
 
     print "Disabled Accounts"
@@ -347,18 +526,27 @@ def main():
     print "----------------------------------"
     for counter,user in enumerate(users_not_accessed_account):
         print str(counter+1) + ". " + user + ":" + str(users_not_accessed_account[user])
+	#Uncomment below to send mail
+        #if not last_activity_mail(user,users_not_accessed_account[user]):
+            #last_activity_mail(user,users_not_accessed_account[user])
     print
 
     print "UI Access BUT Never Logged In"
     print "-----------------------------"
     for counter,user in enumerate(never_logged_in):
         print str(counter+1) + ". " + user + ":" + str(never_logged_in[user])
+	#Uncomment below to send mail
+        #if not never_logged_in_mail(user,never_logged_in[user]):
+            #never_logged_in_mail(user,never_logged_in[user])
     print
 
     print "Never Accessed Account"
     print "----------------------"
     for counter,user in enumerate(never_accessed_account):
         print str(counter+1) + ". " + user + ":" + str(never_accessed_account[user])
+	#Uncomment below to send mail
+        #if not never_accessed_mail(user, never_accessed_account[user]):
+            #never_accessed_mail(user, never_accessed_account[user])
     print
 
 if __name__ == '__main__':
