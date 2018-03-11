@@ -34,7 +34,7 @@ def generate_report(id):
         conn.generate_credential_report()
         time.sleep(3)
     except:
-        print "Report already created."
+        pass
 
     cred_report = conn.get_credential_report()
     report = base64.b64decode(cred_report['get_credential_report_response']['get_credential_report_result']['content']).strip('\r').split('\n')
@@ -484,8 +484,14 @@ def main():
 
     print '\t\t\t\t\t\t\t AWS COMPLIANCE REPORT'
     print '\t\t\t\t\t\t\t-----------------------\n\n'
+    
     for id in profiles:
-        execute(id)
+	try:
+        	execute(id)
+    	except Exception, e:
+		if 'AccessDenied' in e.message:
+			print 'ERROR: Lack of permissions to access AWS IAM for account ' + id
+			print
 
     print "MFA_NON-COMPLIANT"
     print "-----------------"
