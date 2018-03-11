@@ -492,6 +492,9 @@ def main():
 		if 'AccessDenied' in e.message:
 			print 'ERROR: Lack of permissions to access AWS IAM for account ' + id  + ' .'
 			print
+		else:
+                	print 'ERROR: ' + e.message
+			print
 
     print "MFA_NON-COMPLIANT"
     print "-----------------"
